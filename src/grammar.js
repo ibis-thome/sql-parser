@@ -1,3 +1,5 @@
+const { Table, Field, Upsert } = require('./nodes');
+
 const Parser = require('jison').Parser;
 
 const unwrap = /^function\s*\(.*?\)\s*{\s*return\s*([\s\S]*);\s*}/;
@@ -34,7 +36,10 @@ const grammar = {
         o('SelectQuery Unions', function ($1, $2) {
             $1.unions = $2;
             return $1;
-        })
+        }),
+        o('Delete'),
+        o('Update'),
+        o('Upsert')
     ],
     SelectQuery          : [
         o('SelectWithLimitQuery'),
@@ -62,6 +67,26 @@ const grammar = {
             return $1;
         })
     ],
+    Upsert: [
+        o('UpsertClause'),
+        o('UpsertClause WITH_PRIMARY_KEY', function($1, $2) {
+            $1.extension = $2;
+            return $1;
+        })
+    ],
+    UpsertClause: [
+        o('UPSERT Table LEFT_PAREN Fields RIGHT_PAREN VALUES LEFT_PAREN List RIGHT_PAREN', function ($2, $4, $8) {
+            return new Upsert($2, $4, $8);
+        })
+    ],
+    Update: [
+        o('UpdateClause')
+    ],
+    UpdateClause: [
+        o('UPDATE Table SET Fields WhereClause', function ($1, $3, $4) {
+            return new Update($1, $3, $4);
+        })
+    ],
     Select               : [
         o('SelectClause'),
         o('SelectClause WhereClause', function ($1, $2) {
@@ -83,7 +108,25 @@ const grammar = {
             return new Select($3, $5, true, $6);
         })
     ],
+    Delete: [
+        o('DeleteClause'),
+        o('DeleteClause WhereClause', function ($1, $2) {
+            $1.where = $2;
+            return $1;
+        })
+    ],
+    DeleteClause: [
+        o('DELETE FROM Table', function ($3) {
+            return new Delete($3, false);
+        })
+    ],
     Table                : [
+        o('DBLSTRING', function($1) {
+            return new Table($1);
+        }),
+        o('DBLSTRING Literal', function($1) {
+            return new Table($1);
+        }),
         o('Literal', function ($1) {
             return new Table($1);
         }),
@@ -104,6 +147,9 @@ const grammar = {
         }),
         o('Literal WINDOW WINDOW_FUNCTION LEFT_PAREN Number RIGHT_PAREN', function ($1, $2, $3, $5) {
             return new Table($1, null, $2, $3, $5);
+        }),
+        o('DBLSTRING Literal DBLSTRING', function($2) {
+            return new Table($2);
         })
     ],
     Unions               : [
@@ -321,7 +367,8 @@ const grammar = {
         o('Function'),
         o('UserFunction'),
         o('Boolean'),
-        o('Parameter')
+        o('Parameter'),
+        o('Placeholder')
     ],
     WhitepaceList        : [
         o('Value Value', function ($1, $2) {
@@ -352,12 +399,20 @@ const grammar = {
             return new ParameterValue($1);
         })
     ],
+    Placeholder            : [
+        o('PLACEHOLDER', function ($1) {
+            return new Placeholder($1);
+        })
+    ],
     String               : [
         o('STRING', function ($1) {
             return new StringValue($1, "'");
         }),
         o('DBLSTRING', function ($1) {
             return new StringValue($1, '"');
+        }),
+        o('DBLSTRING DOT DBLSTRING', function ($1, $3) {
+            return new StringValue([$1, $3], '"');
         })
     ],
     Literal              : [
@@ -366,11 +421,17 @@ const grammar = {
         }),
         o('Literal DOT LITERAL', function ($1, $3) {
             return new LiteralValue($1, $3);
+        }),
+        o('Literal DOT DBLSTRING', function ($1, $3) {
+            return new LiteralValue($1, $3, true);
         })
     ],
     Function             : [
         o('FUNCTION LEFT_PAREN AggregateArgumentList RIGHT_PAREN', function ($1, $3) {
             return new FunctionValue($1, $3);
+        }),
+        o('FIELD_FUNCTION', function($1) {
+            return new Field($1);
         })
     ],
     UserFunction         : [
@@ -412,11 +473,17 @@ const grammar = {
         o('STAR', function () {
             return new Star();
         }),
+        o('FIELD_FUNCTION', function($1) {
+            return new Field($1);
+        }),
         o('Expression', function ($1) {
             return new Field($1);
         }),
         o('Expression AS Literal', function ($1, $3) {
             return new Field($1, $3);
+        }),
+        o('Expression AS DBLSTRING', function ($1, $3) {
+            return new Field($1, $3, true);
         })
     ]
 };

@@ -1,4 +1,4 @@
-const SQL_FUNCTIONS = ['AVG', 'COUNT', 'MIN', 'MAX', 'SUM'];
+const SQL_FUNCTIONS = ['AVG', 'COUNT', 'MIN', 'MAX', 'SUM', 'HASH_SHA256', 'TO_BINARY', 'UPPER', 'LOWER'];
 const SQL_SORT_ORDERS = ['ASC', 'DESC'];
 const SQL_OPERATORS = ['=', '!=', '>=', '>', '<=', '<>', '<', 'LIKE', 'NOT LIKE', 'ILIKE', 'NOT ILIKE', 'IS NOT', 'IS', 'REGEXP', 'NOT REGEXP'];
 const SUB_SELECT_OP = ['IN', 'NOT IN', 'ANY', 'ALL', 'SOME'];
@@ -16,6 +16,9 @@ const PARAMETER = /^\$([a-z0-9_]+(\:(number|float|string|date|boolean))?)/;
 const NUMBER = /^[+-]?[0-9]+(\.[0-9]+)?/;
 const STRING = /^'((?:[^\\']+?|\\.|'')*)'(?!')/;
 const DBLSTRING = /^"([^\\"]*(?:\\.[^\\"]*)*)"/;
+const WITH_PRIMARY_KEY = /^WITH PRIMARY KEY/i;
+const FIELD_FUNCTIONS = [`CURRENT_UTCTIMESTAMP`];
+const PLACEHOLDER = `?`;
 
 class Lexer {
 
@@ -47,6 +50,9 @@ class Lexer {
                 this.parameterToken() ||
                 this.parensToken() ||
                 this.whitespaceToken() ||
+                this.primaryKeyToken() ||
+                this.fieldFunctionToken() ||
+                this.placeholderToken() ||
                 this.literalToken();
 
             if (bytesConsumed < 1) {
@@ -134,6 +140,9 @@ class Lexer {
 
     keywordToken() {
         return this.tokenizeFromWord('SELECT') ||
+            this.tokenizeFromWord('DELETE') ||
+            this.tokenizeFromWord('UPDATE') ||
+            this.tokenizeFromWord('UPSERT') ||
             this.tokenizeFromWord('INSERT') ||
             this.tokenizeFromWord('INTO') ||
             this.tokenizeFromWord('DEFAULT') ||
@@ -236,6 +245,18 @@ class Lexer {
 
     parensToken() {
         return this.tokenizeFromRegex('LEFT_PAREN', /^\(/) || this.tokenizeFromRegex('RIGHT_PAREN', /^\)/);
+    }
+
+    primaryKeyToken() {
+        return this.tokenizeFromRegex("WITH_PRIMARY_KEY", WITH_PRIMARY_KEY);
+    }
+
+    fieldFunctionToken() {
+        return this.tokenizeFromList("FIELD_FUNCTION", FIELD_FUNCTIONS);
+    }
+
+    placeholderToken() {
+        return this.tokenizeFromWord("PLACEHOLDER", PLACEHOLDER);
     }
 
     windowExtension() {

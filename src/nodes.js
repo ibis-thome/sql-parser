@@ -47,6 +47,31 @@ exports.Select = class Select {
     }
 };
 
+exports.Update = class Update {
+    constructor(source, fields, where) {
+        this.fields = fields;
+        this.source = source;
+        this.where = where;
+    }
+
+    toString() {
+        return `UPDATE ${this.source} SET ${this.fields} WHERE ${this.where.toString()}`;
+    }
+};
+
+exports.Upsert = class Upsert {
+    constructor(source, fields, values) {
+        this.fields = fields;
+        this.values = values;
+        this.source = source;
+        this.extension = null;
+    }
+
+    toString() {
+        return `UPSERT ${this.source} (${this.fields.join(", ")}) values (${this.values.join(", ")}) ${this.extension ? ` ${this.extension.toString()}` : ``}`;
+    }
+};
+
 exports.SubSelect = class SubSelect {
     constructor(select, name = null) {
         this.select = select;
@@ -95,9 +120,10 @@ exports.Union = class Union {
 };
 
 exports.LiteralValue = class LiteralValue {
-    constructor(value1, value2 = null) {
+    constructor(value1, value2 = null, dblQuote = false) {
         this.value = value1;
         this.value2 = value2;
+        this.dblQuote = dblQuote;
         if (this.value2) {
             this.nested = true;
             this.values = this.value.values;
@@ -110,25 +136,25 @@ exports.LiteralValue = class LiteralValue {
     }
 
     // TODO: Backtick quotes only supports MySQL, Postgres uses double-quotes
-    toString(quote = true) {
+    toString(quote = false) {
         if (quote) {
             return `\`${this.values.join('`.`')}\``;
         }
         else {
-            return `${this.values.join('.')}`;
+            return `${this.values.map((value, index) => (index && this.dblQuote) ? `"${value}"` : value).join(".")}`;
         }
     }
 };
 
 exports.StringValue = class StringValue {
     constructor(value1, quoteType = '\'\'') {
-        this.value = value1;
+        this.values = Array.isArray(value1) ? value1 : [value1];
         this.quoteType = quoteType;
     }
 
     toString() {
-        const escaped = this.quoteType === '\'' ? this.value.replace(/(^|[^\\])'/g, '$1\'\'') : this.value;
-        return `${this.quoteType}${escaped}${this.quoteType}`;
+        const escaped = this.quoteType === '\'' ? this.values.map(value=> value.replace(/(^|[^\\])'/g, '$1\'\'')) : this.values;
+        return `${this.values.map(value => `${this.quoteType}${value}${this.quoteType}`).join(".")}`;
     }
 };
 
@@ -180,6 +206,26 @@ exports.ParameterValue = class ParameterValue {
         return `$${this.value}`;
     }
 };
+
+exports.Placeholder = class Placeholder {
+    constructor() {
+
+    }
+
+    toString() {
+        return `?`;
+    }
+}
+
+exports.Extension = class Extension {
+    constructor(extension) {
+        this.extension = extension;
+    }
+
+    toString() {
+        return `${extension}`;
+    }
+}
 
 exports.ArgumentListValue = class ArgumentListValue {
     constructor(value1, distinct = false) {
@@ -333,14 +379,15 @@ exports.Table = class Table {
     }
 
     toString() {
+        let name = /(:|\.)/.test(this.name) ? `\"${this.name}\"` : `${this.name}`;
         if (this.win) {
-            return `${this.name}.${this.win}:${this.winFn}(${this.winArg})`;
+            return `${name}.${this.win}:${this.winFn}(${this.winArg})`;
         }
         else if (this.alias) {
-            return `${this.name} AS ${this.alias}`;
+            return `${name} AS ${this.alias}`;
         }
         else {
-            return this.name.toString();
+            return name;
         }
     }
 };
@@ -421,13 +468,23 @@ exports.Field = class Field {
 
     toString() {
         if (this.name) {
-            return `${this.field} AS ${this.name}`;
+            return `${this.field} AS "${this.name}"`;
         }
         else {
             return this.field.toString();
         }
     }
 };
+
+exports.Delete = class Delete {
+    constructor(source) {
+        this.source = source;
+    }
+
+    toString() {
+        return `DELETE FROM ${this.source}`;
+    }
+}
 
 exports.Star = class Star {
     toString() {
