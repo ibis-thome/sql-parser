@@ -148,6 +148,7 @@ class Lexer {
             this.tokenizeFromWord('DEFAULT') ||
             this.tokenizeFromWord('VALUES') ||
             this.tokenizeFromWord('DISTINCT') ||
+            this.tokenizeFromWord('SET') ||
             this.tokenizeFromWord('FROM') ||
             this.tokenizeFromWord('WHERE') ||
             this.tokenizeFromWord('GROUP') ||

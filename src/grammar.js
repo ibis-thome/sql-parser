@@ -1,4 +1,4 @@
-const { Table, Field, Upsert } = require('./nodes');
+const { Table, Field, Upsert, Insert, Op } = require('./nodes');
 
 const Parser = require('jison').Parser;
 
@@ -39,7 +39,8 @@ const grammar = {
         }),
         o('Delete'),
         o('Update'),
-        o('Upsert')
+        o('Upsert'),
+        o('Insert')
     ],
     SelectQuery          : [
         o('SelectWithLimitQuery'),
@@ -75,16 +76,19 @@ const grammar = {
         })
     ],
     UpsertClause: [
-        o('UPSERT Table LEFT_PAREN Fields RIGHT_PAREN VALUES LEFT_PAREN List RIGHT_PAREN', function ($2, $4, $8) {
-            return new Upsert($2, $4, $8);
+        o('UPSERT Table LEFT_PAREN Fields RIGHT_PAREN VALUES Table', function ($2, $4, $7) {
+            return new Upsert($2, $4, $7);
+        }),
+        o('UPSERT Table LEFT_PAREN Fields RIGHT_PAREN Query', function ($2, $4, $6) {
+            return new Upsert($2, $4, $6);
         })
     ],
     Update: [
         o('UpdateClause')
     ],
     UpdateClause: [
-        o('UPDATE Table SET Fields WhereClause', function ($1, $3, $4) {
-            return new Update($1, $3, $4);
+        o('UPDATE TableWithoutAlias SET ArgumentList WhereClause', function ($2, $4, $5) {
+            return new Update($2, $4, $5);
         })
     ],
     Select               : [
@@ -120,15 +124,32 @@ const grammar = {
             return new Delete($3, false);
         })
     ],
-    Table                : [
-        o('DBLSTRING', function($1) {
-            return new Table($1);
+    Insert: [
+        o('InsertClause')
+    ],
+    InsertClause: [
+        o('INSERT INTO Table LEFT_PAREN Fields RIGHT_PAREN VALUES Table', function ($3, $5, $8) {
+            return new Insert($3, $5, $8);
         }),
-        o('DBLSTRING Literal', function($1) {
+        o('INSERT INTO Table LEFT_PAREN Fields RIGHT_PAREN Query', function ($3, $5, $7) {
+            return new Insert($3, $5, $7);
+        })
+    ],
+    TableWithoutAlias: [
+        o('DBLSTRING', function($1) {
             return new Table($1);
         }),
         o('Literal', function ($1) {
             return new Table($1);
+        })
+    ],
+    Table: [
+        o('TableWithoutAlias'),
+        o('DBLSTRING Literal', function($1, $2) {
+            return new Table($1, $2);
+        }),
+        o('DBLSTRING AS Literal', function($1, $3) {
+            return new Table($1, $3);
         }),
         o('Literal Literal', function ($1, $2) {
             return new Table($1, $2);
@@ -179,6 +200,9 @@ const grammar = {
     Join                 : [
         o('JOIN Table ON Expression', function ($2, $4) {
             return new Join($2, $4);
+        }),
+        o('INNER JOIN Table ON Expression', function ($3, $5) {
+            return new Join($3, $5, 'INNER');
         }),
         o('LEFT JOIN Table ON Expression', function ($3, $5) {
             return new Join($3, $5, 'LEFT');
@@ -379,7 +403,7 @@ const grammar = {
             return $1;
         })
     ],
-    List                 : [
+    List: [
         o('ArgumentList', function ($1) {
             return new ListValue($1);
         })
@@ -461,7 +485,7 @@ const grammar = {
             return $1.concat($3);
         })
     ],
-    Fields               : [
+    Fields: [
         o('Field', function ($1) {
             return [$1];
         }),
@@ -476,6 +500,12 @@ const grammar = {
         o('FIELD_FUNCTION', function($1) {
             return new Field($1);
         }),
+        o('FIELD_FUNCTION AS Literal', function($1, $3) {
+            return new Field($1, $3);
+        }),
+        o('FIELD_FUNCTION AS DBLSTRING', function($1, $3) {
+            return new Field($1, $3);
+        }),
         o('Expression', function ($1) {
             return new Field($1);
         }),
@@ -483,7 +513,7 @@ const grammar = {
             return new Field($1, $3);
         }),
         o('Expression AS DBLSTRING', function ($1, $3) {
-            return new Field($1, $3, true);
+            return new Field($1, $3);
         })
     ]
 };

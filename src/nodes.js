@@ -55,7 +55,19 @@ exports.Update = class Update {
     }
 
     toString() {
-        return `UPDATE ${this.source} SET ${this.fields} WHERE ${this.where.toString()}`;
+        return `UPDATE ${this.source} SET ${this.fields} ${this.where.toString()}`;
+    }
+};
+
+exports.Insert = class Insert {
+    constructor(source, fields, values) {
+        this.fields = fields;
+        this.values = values;
+        this.source = source;
+    }
+
+    toString() {
+        return `INSERT INTO ${this.source} (${this.fields.join(", ")}) ${this.values instanceof exports.ListValue ? 'values ' : '\n'}${this.values.toString()}`;
     }
 };
 
@@ -68,7 +80,7 @@ exports.Upsert = class Upsert {
     }
 
     toString() {
-        return `UPSERT ${this.source} (${this.fields.join(", ")}) values (${this.values.join(", ")}) ${this.extension ? ` ${this.extension.toString()}` : ``}`;
+        return `UPSERT ${this.source} (${this.fields.join(", ")}) ${this.values instanceof exports.ListValue ? 'values ' : '\n'}${this.values.toString()} ${this.extension ? ` ${this.extension.toString()}` : ``}`;
     }
 };
 
@@ -434,8 +446,17 @@ exports.Op = class Op {
         this.right = right;
     }
 
+    isBool() {
+        return ["and","or"].indexOf(this.operation) >= 0;
+    }
+
     toString() {
-        return `(${this.left} ${this.operation.toUpperCase()} ${this.right})`;
+        let bLeft = false, bRight = false; // are perenthesis needed?
+        if(this.isBool()) {
+            bLeft = this.left instanceof Op && this.left.isBool() && this.left.operation !== this.operation;
+            bRight = this.right instanceof Op && this.right.isBool() && this.right.operation !== this.operation;
+        }
+        return `${bLeft ? "(" : ""}${this.left}${bLeft ? ")" : ""} ${this.operation.toUpperCase()} ${bRight ? "(" : ""}${this.right}${bRight ? ")" : ""}`;
     }
 };
 
